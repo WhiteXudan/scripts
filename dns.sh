@@ -35,72 +35,6 @@ while getopts "d:n:" opt; do
     esac
 done
 
-
-# Fonction pour récupérer l'adresse IP
-get_ip() {
-    echo $(hostname -I | awk '{print $1}')
-}
-
-# Fonction pour mettre à jour les fichiers de configuration
-update_dns_config() {
-    nouvelIp=$(get_ip)
-    nouvelIpQ=$(echo "$ip" | cut -d '.' -f 4)
-    nouvelIpPTR=$(echo "$ip" | awk -F. '{print $3"."$2"."$1}') 
-
-    # Configuration DIRECT (A)
-    echo -e "Configuring the direct resolution (type A)..."
-    {
-        echo -e "; BIND data file for local loopback interface"
-        echo -e ";"
-        echo -e "\$TTL	604800"
-        echo -e "@	IN	SOA	$namserver.$nomDeDomaine. root.$nomDeDomaine. ("
-        echo -e "			      2		; Serial"
-        echo -e "			 604800		; Refresh"
-        echo -e "			  86400		; Retry"
-        echo -e "			2419200		; Expire"
-        echo -e "			 604800 )	; Negative Cache TTL"
-        echo -e ";"
-        echo -e "@	IN	NS	$namserver.$nomDeDomaine."
-        echo -e "$namserver	IN	A	$nouvelIp"
-    } | sudo tee "/etc/bind/$nomDeDomaine" > /dev/null
-
-    # Configuration INVERSE (PTR)
-    echo -e "Configuring the inverse resolution (type PTR)..."
-    {
-        echo -e "; BIND data file for local loopback interface"
-        echo -e ";"
-        echo -e "\$TTL	604800"
-        echo -e "@	IN	SOA	$namserver.$nomDeDomaine. root.$nomDeDomaine. ("
-        echo -e "			      2		; Serial"
-        echo -e "			 604800		; Refresh"
-        echo -e "			  86400		; Retry"
-        echo -e "			2419200		; Expire"
-        echo -e "			 604800 )	; Negative Cache TTL"
-        echo -e ";"
-        echo -e "@	IN	NS	$namserver.$nomDeDomaine."
-        echo -e "$nouvelIpQ	IN	PTR	$namserver.$nomDeDomaine."
-    } | sudo tee "/etc/bind/$(echo "$nomDeDomaine" | sed 's/\.[^.]*$/.inv/')" > /dev/null
-
-    # Mise à jour de la configuration DNS dans /etc/systemd/resolved.conf
-    if [ -f /etc/systemd/resolved.conf ]; then
-        echo -e "Updating DNS configurations in /etc/systemd/resolved.conf...\n"
-        
-        # Vérification et mise à jour de l'adresse DNS
-        if ! grep -q "^DNS=.*$nouvelIp" /etc/systemd/resolved.conf; then
-            if grep -q "^DNS=" /etc/systemd/resolved.conf; then
-                sudo sed -i "s/^DNS=\(.*\)/DNS=\1 $nouvelIp/" /etc/systemd/resolved.conf
-            else
-                sudo sed -i "s/^#*DNS=/DNS=$nouvelIp/" /etc/systemd/resolved.conf
-            fi
-        else
-            echo -e "DNS \e[34m$nouvelIp\e[0m is already added.\n"
-        fi
-        
-        sudo systemctl restart systemd-resolved
-    fi
-}
-####################################
-
 # Informations du script
 scriptName="Configuration de DNS (BIND9)"
 author="Auteur : [Ton Nom]"
@@ -137,8 +71,26 @@ printf "| ${blue}%-${maxLength}s${reset} |\n" "$date"
 printf "+%s+\n" "$(head -c $totalWidth < /dev/zero | tr '\0' '-')"
 echo
 
+# Noms de fichiers de configuration
+direct_conf="/etc/bind/$nomDeDomaine"
+inv_conf="/etc/bind/$(echo "$nomDeDomaine" | sed 's/\.[^.]*$/.inv/')"
+
+# Créer les fichiers de configuration si nécessaires
+for conf in "$direct_conf" "$inv_conf"; do
+    if [ ! -f "$conf" ]; then
+        echo "Creating the configuration file: $conf..."
+        sudo touch "$conf"
+        sudo chmod u+rw,g+rw "$conf"  # Permissions pour l'utilisateur et le groupe
+    fi
+done
+
+
+confdns() {
+	local ip=$1
+	local nomDeDomaine=$2
+	local namserver=$3
+	
 # Variables
-ip=$(hostname -I | awk '{print $1}')  # Récupération de l'adresse IP (première interface)
 ipQ=$(echo "$ip" | cut -d '.' -f 4)     # Dernier octet pour PTR
 ipPTR=$(echo "$ip" | awk -F. '{print $3"."$2"."$1}')  # Format inverse
 
@@ -155,15 +107,6 @@ if [ ! -d /etc/bind ]; then
 else
     echo -e "OK! bind9 is already installed...\n"
 fi
-
-echo -e "#################\n# CONFIGURATION #\n#################\n"
-
-# Fonction pour vérifier le format du domaine
-validate_domain() {
-    [[ "$1" =~ ^[a-zA-Z0-9]([a-zA-Z0-9-]{1,61}[a-zA-Z0-9])?\.[a-zA-Z]{2,}$ ]]
-}
-
-echo -e "\n"
 
 # Calcul des longueurs des éléments
 ipLength=${#ip}
@@ -185,20 +128,6 @@ printf "+%s+\n" "$(head -c $totalWidth < /dev/zero | tr '\0' '-')"
 printf "| \e[34m%-${maxIpLength}s\e[0m | \e[34m%-${maxDomainLength}s\e[0m | \e[34m%-${maxNameserverLength}s\e[0m |\n" "$ip" "$nomDeDomaine" "$namserver"
 printf "+%s+\n" "$(head -c $totalWidth < /dev/zero | tr '\0' '-')"
 echo -e "\n"
-
-
-# Noms de fichiers de configuration
-direct_conf="/etc/bind/$nomDeDomaine"
-inv_conf="/etc/bind/$(echo "$nomDeDomaine" | sed 's/\.[^.]*$/.inv/')"
-
-# Créer les fichiers de configuration si nécessaires
-for conf in "$direct_conf" "$inv_conf"; do
-    if [ ! -f "$conf" ]; then
-        echo "Creating the configuration file: $conf..."
-        sudo touch "$conf"
-        sudo chmod u+rw,g+rw "$conf"  # Permissions pour l'utilisateur et le groupe
-    fi
-done
 
 # Configuration DIRECT (A)
 echo -e "Configuring the direct resolution (type A)..."
@@ -273,38 +202,28 @@ echo -e "Configuring DNS default-zones in /etc/bind/named.conf.default-zones ...
 if [ -f /etc/systemd/resolved.conf ]; then
     echo -e "Updating DNS configurations in /etc/systemd/resolved.conf...\n"
     
-    # Vérification et mise à jour de l'adresse DNS
-    if ! grep -q "^DNS=.*$ip" /etc/systemd/resolved.conf; then
-        if grep -q "^DNS=" /etc/systemd/resolved.conf; then
-            # Si DNS existe déjà, ajouter avec un espace
-            sudo sed -i "s/^DNS=\(.*\)/DNS=\1 $ip/" /etc/systemd/resolved.conf
-        else
-            # Si DNS n'existe pas, ajouter sans espace
-            sudo sed -i "s/^#*DNS=/DNS=$ip/" /etc/systemd/resolved.conf
-        fi
+    # Mise à jour de l'adresse DNS (remplacement)
+    if grep -q "^DNS=" /etc/systemd/resolved.conf; then
+        # Remplacer l'adresse DNS existante
+        sudo sed -i "s/^DNS=.*/DNS=$ip/" /etc/systemd/resolved.conf
     else
-        echo -e "DNS \e[34m$ip\e[0m is already added.\n"
+        # Ajouter l'adresse DNS si elle n'existe pas
+        sudo sed -i "s/^#*DNS=/DNS=$ip/" /etc/systemd/resolved.conf
     fi
 
-    # Vérification et mise à jour de l'adresse FallbackDNS
-    if ! grep -q "^FallbackDNS=.*8.8.8.8" /etc/systemd/resolved.conf; then
-        sudo sed -i '/^#*FallbackDNS=/s/^#//; /^FallbackDNS=/s/$/ 8.8.8.8/' /etc/systemd/resolved.conf
-    else
-        echo -e "FallbackDNS \e[34m8.8.8.8\e[0m is already added.\n"
+    # Vérification et mise à jour de FallbackDNS (ajout si absent)
+    if ! grep -q "^FallbackDNS=8.8.8.8" /etc/systemd/resolved.conf; then
+        sudo sed -i '/^#*FallbackDNS=/s/^#//; /^FallbackDNS=/s/$/8.8.8.8/' /etc/systemd/resolved.conf
     fi
 
-    # Vérification et mise à jour du domaine
-    if ! grep -q "^Domains=.*$nomDeDomaine" /etc/systemd/resolved.conf; then
-        if grep -q "^Domains=" /etc/systemd/resolved.conf; then
-            # Si Domains existe déjà, ajouter avec un espace
-            sudo sed -i "s/^Domains=\(.*\)/Domains=\1 $nomDeDomaine/" /etc/systemd/resolved.conf
-        else
-            # Si Domains n'existe pas, ajouter sans espace
-            sudo sed -i "s/^#*Domains=/Domains=$nomDeDomaine/" /etc/systemd/resolved.conf
-        fi
+    # Mise à jour de l'adresse DNS (remplacement)
+    if grep -q "^Domains=" /etc/systemd/resolved.conf; then
+        # Remplacer le domaine existant
+        sudo sed -i "s/^Domains=.*/Domains=$nomDeDomaine/" /etc/systemd/resolved.conf
     else
-        echo -e "Domain \e[34m$nomDeDomaine\e[0m is already added.\n"
-    fi
+        # Ajouter le domaine s'il n'existe pas
+        sudo sed -i "s/^#*Domains=/Domains=$nomDeDomaine/" /etc/systemd/resolved.conf
+    fi   
 
     sudo systemctl restart systemd-resolved
 else
@@ -322,12 +241,14 @@ else
     sudo systemctl restart systemd-resolved
 fi
 
+sudo systemctl restart bind9.service
+sleep 2
+
 # Vérification de la configuration
 echo -e "Verifying BIND9 configuration...\n"
 if named-checkconf; then
     echo "BIND9 configuration is valid..."
     	# Finalisation
-	sudo systemctl restart bind9.service
 	echo -e "\nBIND9 configuration completed.\n"
 
 	# Ajoutez ceci à la fin de votre script existant
@@ -389,16 +310,23 @@ else
     exit 1
 fi
 
+}
 
-# Boucle de surveillance de l'adresse IP
+
+# Variable Globale (ip)
+ip=$(hostname -I)  # Récupération de l'adresse IP (première interface)
+
+# Appel de la fonction de configuration confdns()
+confdns "$ip" "$nomDeDomaine" "$namserver"
+
 while true; do
-    nouvelIp=$(get_ip)
-    
+    # Mettre le script en veille pendant 10s
+    sleep 10
+    nouvelIp=$(hostname -I) # Nouvelle adresse IP
+
     if [ "$nouvelIp" != "$ip" ]; then
-        echo "L'adresse IP DNS a changé : $nouvelIp"
-        update_dns_config
-        sudo systemctl restart bind9.service
+       ip=$nouvelIp
+       # Appel de la fonction de configuration confdns()
+	confdns "192.168.20.46" "$nomDeDomaine" "$namserver"
     fi
-    
-    sleep 30  # Vérifie toutes les 10 secondes (ajuste si nécessaire)
 done
