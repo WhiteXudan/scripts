@@ -1,5 +1,106 @@
 #!/bin/bash
 
+############ FONCTIONS #############
+# Fonction pour valider le format du domaine
+validate_domain() {
+    if [[ ! $1 =~ ^[a-zA-Z0-9]+(\.[a-zA-Z]{2,})+$ ]]; then
+        echo "Erreur : Le domaine '$1' n'est pas au format valide (ex: exemple.com)."
+        exit 1
+    fi
+}
+
+# Fonction pour valider le format du nameserver
+validate_nameserver() {
+    if [[ ! $1 =~ ^[a-zA-Z]+$ ]]; then
+        echo "Erreur : Le nameserver '$1' doit contenir uniquement des lettres de l'alphabet anglais."
+        exit 1
+    fi
+}
+
+# Traitement des options
+while getopts "d:n:" opt; do
+    case ${opt} in
+        d )
+            nomDeDomaine=$OPTARG
+            validate_domain "$nomDeDomaine"
+            ;;
+        n )
+            namserver=$OPTARG
+            validate_nameserver "$namserver"
+            ;;
+        \? )
+            echo "Usage: cmd [-d domain] [-n nameserver]"
+            exit 1
+            ;;
+    esac
+done
+
+
+# Fonction pour récupérer l'adresse IP
+get_ip() {
+    echo $(hostname -I | awk '{print $1}')
+}
+
+# Fonction pour mettre à jour les fichiers de configuration
+update_dns_config() {
+    nouvelIp=$(get_ip)
+    nouvelIpQ=$(echo "$ip" | cut -d '.' -f 4)
+    nouvelIpPTR=$(echo "$ip" | awk -F. '{print $3"."$2"."$1}') 
+
+    # Configuration DIRECT (A)
+    echo -e "Configuring the direct resolution (type A)..."
+    {
+        echo -e "; BIND data file for local loopback interface"
+        echo -e ";"
+        echo -e "\$TTL	604800"
+        echo -e "@	IN	SOA	$namserver.$nomDeDomaine. root.$nomDeDomaine. ("
+        echo -e "			      2		; Serial"
+        echo -e "			 604800		; Refresh"
+        echo -e "			  86400		; Retry"
+        echo -e "			2419200		; Expire"
+        echo -e "			 604800 )	; Negative Cache TTL"
+        echo -e ";"
+        echo -e "@	IN	NS	$namserver.$nomDeDomaine."
+        echo -e "$namserver	IN	A	$nouvelIp"
+    } | sudo tee "/etc/bind/$nomDeDomaine" > /dev/null
+
+    # Configuration INVERSE (PTR)
+    echo -e "Configuring the inverse resolution (type PTR)..."
+    {
+        echo -e "; BIND data file for local loopback interface"
+        echo -e ";"
+        echo -e "\$TTL	604800"
+        echo -e "@	IN	SOA	$namserver.$nomDeDomaine. root.$nomDeDomaine. ("
+        echo -e "			      2		; Serial"
+        echo -e "			 604800		; Refresh"
+        echo -e "			  86400		; Retry"
+        echo -e "			2419200		; Expire"
+        echo -e "			 604800 )	; Negative Cache TTL"
+        echo -e ";"
+        echo -e "@	IN	NS	$namserver.$nomDeDomaine."
+        echo -e "$nouvelIpQ	IN	PTR	$namserver.$nomDeDomaine."
+    } | sudo tee "/etc/bind/$(echo "$nomDeDomaine" | sed 's/\.[^.]*$/.inv/')" > /dev/null
+
+    # Mise à jour de la configuration DNS dans /etc/systemd/resolved.conf
+    if [ -f /etc/systemd/resolved.conf ]; then
+        echo -e "Updating DNS configurations in /etc/systemd/resolved.conf...\n"
+        
+        # Vérification et mise à jour de l'adresse DNS
+        if ! grep -q "^DNS=.*$nouvelIp" /etc/systemd/resolved.conf; then
+            if grep -q "^DNS=" /etc/systemd/resolved.conf; then
+                sudo sed -i "s/^DNS=\(.*\)/DNS=\1 $nouvelIp/" /etc/systemd/resolved.conf
+            else
+                sudo sed -i "s/^#*DNS=/DNS=$nouvelIp/" /etc/systemd/resolved.conf
+            fi
+        else
+            echo -e "DNS \e[34m$nouvelIp\e[0m is already added.\n"
+        fi
+        
+        sudo systemctl restart systemd-resolved
+    fi
+}
+####################################
+
 # Informations du script
 scriptName="Configuration de DNS (BIND9)"
 author="Auteur : [Ton Nom]"
@@ -10,8 +111,6 @@ date="Date : $(date +'%d/%m/%Y')"
 bold=$(tput bold)
 blue="\e[34m"
 reset="\e[0m"
-
-#!/bin/bash
 
 # Informations du script
 scriptName="Configuration de DNS (BIND9)"
@@ -38,8 +137,6 @@ printf "| ${blue}%-${maxLength}s${reset} |\n" "$date"
 printf "+%s+\n" "$(head -c $totalWidth < /dev/zero | tr '\0' '-')"
 echo
 
-
-
 # Variables
 ip=$(hostname -I | awk '{print $1}')  # Récupération de l'adresse IP (première interface)
 ipQ=$(echo "$ip" | cut -d '.' -f 4)     # Dernier octet pour PTR
@@ -65,28 +162,6 @@ echo -e "#################\n# CONFIGURATION #\n#################\n"
 validate_domain() {
     [[ "$1" =~ ^[a-zA-Z0-9]([a-zA-Z0-9-]{1,61}[a-zA-Z0-9])?\.[a-zA-Z]{2,}$ ]]
 }
-
-# Demande de saisie pour le nom de domaine
-while true; do
-    read -p "Domain name (ex: exemple.com) : " nomDeDomaine
-    if [[ -z "$nomDeDomaine" ]]; then
-        echo -e "Veuillez saisir votre domaine.\n"
-    elif ! validate_domain "$nomDeDomaine"; then
-        echo -e "Format valide : \e[1mexemple.com\e[0m\n"
-    else
-        break
-    fi
-done
-
-# Demande de saisie pour le nom du serveur
-while true; do
-    read -p "Name Server (ex: ns1) : " namserver
-    if [[ -z "$namserver" ]]; then
-        echo -e "Veuillez saisir le nom du serveur \n"
-    else
-        break
-    fi
-done
 
 echo -e "\n"
 
@@ -314,3 +389,16 @@ else
     exit 1
 fi
 
+
+# Boucle de surveillance de l'adresse IP
+while true; do
+    nouvelIp=$(get_ip)
+    
+    if [ "$nouvelIp" != "$ip" ]; then
+        echo "L'adresse IP DNS a changé : $nouvelIp"
+        update_dns_config
+        sudo systemctl restart bind9.service
+    fi
+    
+    sleep 30  # Vérifie toutes les 10 secondes (ajuste si nécessaire)
+done
