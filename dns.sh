@@ -1,6 +1,6 @@
 #!/bin/bash
 
-############ FONCTIONS #############
+############# FONCTIONS #############
 # Fonction pour valider le format du domaine
 validate_domain() {
     if [[ ! $1 =~ ^[a-zA-Z0-9]+(\.[a-zA-Z]{2,})+$ ]]; then
@@ -75,6 +75,21 @@ echo
 direct_conf="/etc/bind/$nomDeDomaine"
 inv_conf="/etc/bind/$(echo "$nomDeDomaine" | sed 's/\.[^.]*$/.inv/')"
 
+# Variables
+ip=$(hostname -I | awk '{print $1}')  # Récupération de l'adresse IP (première interface)
+ipQ=$(echo "$ip" | cut -d '.' -f 4)     # Dernier octet pour PTR
+ipPTR=$(echo "$ip" | awk -F. '{print $3"."$2"."$1}')  # Format inverse
+
+echo -e "#################\n# CONFIGURATION #\n#################\n"
+
+# Vérification de l'installation de BIND9
+if [ ! -d /etc/bind ]; then
+    echo -e "BIND9 is not installed... Let's install it...\n"
+    sudo apt update && sudo apt install -y bind9 bind9utils
+else
+    echo -e "OK! bind9 is already installed...\n"
+fi
+
 # Créer les fichiers de configuration si nécessaires
 for conf in "$direct_conf" "$inv_conf"; do
     if [ ! -f "$conf" ]; then
@@ -84,30 +99,7 @@ for conf in "$direct_conf" "$inv_conf"; do
     fi
 done
 
-
-confdns() {
-	local ip=$1
-	local nomDeDomaine=$2
-	local namserver=$3
-	
-# Variables
-ipQ=$(echo "$ip" | cut -d '.' -f 4)     # Dernier octet pour PTR
-ipPTR=$(echo "$ip" | awk -F. '{print $3"."$2"."$1}')  # Format inverse
-
-# Vérification de l'installation de BIND9
-if [ ! -d /etc/bind ]; then
-    echo -e "BIND9 is not installed... Let's install it...\n"
-    echo -e "Would you want me to install BIND9 ? (Y/n) : "
-    read YesOrNo
-    if [[ "$YesOrNo" =~ ^[Yy]$ ]]; then
-        sudo apt update && sudo apt install -y bind9 bind9utils
-    else
-        exit 0
-    fi
-else
-    echo -e "OK! bind9 is already installed...\n"
-fi
-
+echo -e "\n"
 # Calcul des longueurs des éléments
 ipLength=${#ip}
 domainLength=${#nomDeDomaine}
@@ -145,6 +137,7 @@ echo -e "Configuring the direct resolution (type A)..."
     echo -e ";"
     echo -e "@	IN	NS	$namserver.$nomDeDomaine."
     echo -e "$namserver	IN	A	$ip"
+    echo -e "www	IN	A	$ip"
 } | sudo tee "$direct_conf" > /dev/null
 
 # Configuration INVERSE (PTR)
@@ -241,19 +234,20 @@ else
     sudo systemctl restart systemd-resolved
 fi
 
-sudo systemctl restart bind9.service
-sleep 2
-
 # Vérification de la configuration
 echo -e "Verifying BIND9 configuration...\n"
 if named-checkconf; then
     echo "BIND9 configuration is valid..."
     	# Finalisation
-	echo -e "\nBIND9 configuration completed.\n"
-
-	# Ajoutez ceci à la fin de votre script existant
-	echo -e "Testing...\n"
-
+	sudo systemctl restart bind9.service
+	echo -e "\nBIND9 configuration completed...\n"
+	for ((i=1; i<=100; i++)); do
+	    echo -ne "Testing...$i%\r"
+	    sleep 0.1
+	done
+	echo -e "Done...\n"
+	sleep 2
+	
 	# Test pour le type A
 	echo -e "\e[1;34m[Type A]\e[0m\n"
 	if nslookup "$namserver.$nomDeDomaine"; then
@@ -263,7 +257,16 @@ if named-checkconf; then
 	    echo -e "\e[1mError:\e[0m The A record for \e[34m$namserver.$nomDeDomaine\e[0m could not be found.\n"
 	    a_record_status="Failure"
 	fi
-
+	
+	echo -e "\e[1;34m[Type A]\e[0m\n"
+	if nslookup "www.$nomDeDomaine"; then
+	    echo -e "\e[1mSuccess:\e[0m The A record for \e[34mwww.$nomDeDomaine\e[0m was found.\n"
+	    a_record_status="Success"
+	else
+	    echo -e "\e[1mError:\e[0m The A record for \e[34mwww.$nomDeDomaine\e[0m could not be found.\n"
+	    a_record_status="Failure"
+	fi
+	
 	# Test pour le type PTR
 	echo -e "\e[1;34m[Type PTR]\e[0m\n"
 	if nslookup "$ip"; then
@@ -273,34 +276,28 @@ if named-checkconf; then
 	    echo -e "\e[1mError:\e[0m The PTR record for \e[34m$ip\e[0m could not be found."
 	    ptr_record_status="Failure"
 	fi
-
 	# Affichage du tableau de résultats
 	echo
 	total_successful=0
 	error_message=""
-
 	if [[ "$a_record_status" == "Success" ]]; then
 	    total_successful=$((total_successful + 1))
 	else
 	    error_message="A record resolution failed."
 	fi
-
 	if [[ "$ptr_record_status" == "Success" ]]; then
 	    total_successful=$((total_successful + 1))
 	else
 	    error_message="PTR record resolution failed."
 	fi
-
 	# Déterminer la largeur maximale du tableau
 	if [[ $total_successful -eq 2 ]]; then
-	    result_message="Successful"
+	    result_message="DNS configured successfully"
 	else
 	    result_message="$error_message"
 	fi
-
 	# Calculer la largeur de la ligne (sans débordement)
 	table_width=$(( ${#result_message} + 2 ))  # 2 pour les espaces
-
 	# Affichage du tableau de succès
 	printf "+%s+\n" "$(printf "%-${table_width}s" "" | tr ' ' '-')"  # Ligne supérieure
 	echo -e "| \e[1;32m$result_message\e[0m |"  # Message de résultat
@@ -309,24 +306,3 @@ else
     echo "BIND9 configuration has errors."
     exit 1
 fi
-
-}
-
-
-# Variable Globale (ip)
-ip=$(hostname -I)  # Récupération de l'adresse IP (première interface)
-
-# Appel de la fonction de configuration confdns()
-confdns "$ip" "$nomDeDomaine" "$namserver"
-
-while true; do
-    # Mettre le script en veille pendant 10s
-    sleep 10
-    nouvelIp=$(hostname -I) # Nouvelle adresse IP
-
-    if [ "$nouvelIp" != "$ip" ]; then
-       ip=$nouvelIp
-       # Appel de la fonction de configuration confdns()
-	confdns "192.168.20.46" "$nomDeDomaine" "$namserver"
-    fi
-done
