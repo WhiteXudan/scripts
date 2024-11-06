@@ -1,29 +1,30 @@
-Script de Configuration DNS Automatisée
+# Script de Configuration DNS Automatisée
 
 Ce projet propose un script Bash automatisé pour configurer et gérer des zones DNS avec BIND9 sur un serveur Linux. Il permet de configurer la résolution directe (type A) et inverse (type PTR) pour un domaine personnalisé, en plus de valider les entrées utilisateur et d'ajuster dynamiquement la largeur des tableaux d'affichage en fonction de leur contenu.
-Fonctionnalités
 
-    Validation des entrées : Vérifie le format du domaine et du nameserver pour garantir la cohérence des données.
-    Installation automatique de BIND9 : Installe BIND9 et ses utilitaires s'ils ne sont pas déjà présents.
-    Création de fichiers de configuration : Génère les fichiers de zones directes et inverses pour le domaine spécifié.
-    Mise à jour de la configuration DNS : Configure /etc/systemd/resolved.conf et /etc/bind/named.conf.default-zones pour pointer vers le domaine et le nameserver souhaités.
-    Affichage dynamique en tableau : Présente les informations du script avec des tableaux ajustés dynamiquement pour plus de lisibilité.
-    Tests de configuration : Vérifie la validité des configurations et exécute des tests de résolution DNS.
+## Fonctionnalités
 
-Prérequis
+- **Validation des entrées** : Vérifie le format du domaine et du nameserver pour garantir la cohérence des données.
+- **Installation automatique de BIND9** : Installe BIND9 et ses utilitaires s'ils ne sont pas déjà présents.
+- **Création de fichiers de configuration** : Génère les fichiers de zones directes et inverses pour le domaine spécifié.
+- **Mise à jour de la configuration DNS** : Configure `/etc/systemd/resolved.conf` et `/etc/bind/named.conf.default-zones` pour pointer vers le domaine et le nameserver souhaités.
+- **Affichage dynamique en tableau** : Présente les informations du script avec des tableaux ajustés dynamiquement pour plus de lisibilité.
+- **Tests de configuration** : Vérifie la validité des configurations et exécute des tests de résolution DNS.
 
-    Système d'exploitation : Linux (Ubuntu recommandé)
-    Privilèges sudo : Nécessaire pour l'installation et la modification des fichiers système
-    BIND9 : Si non installé, le script l'installera automatiquement
+## Prérequis
 
-Installation
+- **Système d'exploitation** : Linux (Ubuntu recommandé)
+- **Privilèges sudo** : Nécessaire pour l'installation et la modification des fichiers système
+- **BIND9** : Si non installé, le script l'installera automatiquement
 
-    Cloner le dépôt :
+## Installation
 
-git clone https://github.com/whitexudan/configuration-dns
-cd configuration-dns
+1. **Cloner le dépôt** :
+   ```bash
+   git clone https://github.com/whitexudan/configuration-dns
+   cd configuration-dns
 
-Rendre le script exécutable :
+    Rendre le script exécutable :
 
 chmod +x configure_dns.sh
 
@@ -67,3 +68,5 @@ Contributions
 
 Les contributions sont les bienvenues ! N'hésitez pas à forker le projet, créer une branche, puis soumettre une pull request.
 Licence
+
+Ce projet est sous licence MIT. Voir le fichier LICENSE pour plus de détails.
