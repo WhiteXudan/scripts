@@ -1,72 +1,37 @@
-# Script de Configuration DNS Automatisée
+# DNS Configuration Script - dns.sh
 
-Ce projet propose un script Bash automatisé pour configurer et gérer des zones DNS avec BIND9 sur un serveur Linux. Il permet de configurer la résolution directe (type A) et inverse (type PTR) pour un domaine personnalisé, en plus de valider les entrées utilisateur et d'ajuster dynamiquement la largeur des tableaux d'affichage en fonction de leur contenu.
+Ce script permet de modifier automatiquement le fichier de configuration `/etc/systemd/resolved.conf` en ajoutant ou en remplaçant les informations de domaine et de serveur DNS. Il garantit ainsi une configuration DNS à jour et centralisée.
 
-## Fonctionnalités
+## Exemple d'utilisation
 
-- **Validation des entrées** : Vérifie le format du domaine et du nameserver pour garantir la cohérence des données.
-- **Installation automatique de BIND9** : Installe BIND9 et ses utilitaires s'ils ne sont pas déjà présents.
-- **Création de fichiers de configuration** : Génère les fichiers de zones directes et inverses pour le domaine spécifié.
-- **Mise à jour de la configuration DNS** : Configure `/etc/systemd/resolved.conf` et `/etc/bind/named.conf.default-zones` pour pointer vers le domaine et le nameserver souhaités.
-- **Affichage dynamique en tableau** : Présente les informations du script avec des tableaux ajustés dynamiquement pour plus de lisibilité.
-- **Tests de configuration** : Vérifie la validité des configurations et exécute des tests de résolution DNS.
+Lancez le script avec la commande suivante pour ajouter ou remplacer les informations DNS et de domaine :
 
-## Prérequis
+./dns.sh -d lux.com -n 192.168.20.46 &
 
-- **Système d'exploitation** : Linux (Ubuntu recommandé)
-- **Privilèges sudo** : Nécessaire pour l'installation et la modification des fichiers système
-- **BIND9** : Si non installé, le script l'installera automatiquement
+Cette commande ajoutera ou remplacera les informations de domaine et de serveur DNS dans le fichier `/etc/systemd/resolved.conf`.
 
 ## Installation
 
-1. **Cloner le dépôt** :
-   ```bash
-   git clone https://github.com/whitexudan/configuration-dns
-   cd configuration-dns
+1. Clonez le dépôt dans votre répertoire local :
 
-    Rendre le script exécutable :
+git clone https://github.com/votre-utilisateur/votre-depot.git
 
-chmod +x configure_dns.sh
+2. Rendez le script exécutable :
 
-Exécuter le script avec les paramètres souhaités :
+chmod +x dns.sh
 
-    ./configure_dns.sh -d exemple.com -n nameserver
+3. Ajoutez le script dans votre `$PATH` pour y accéder facilement.
 
-Utilisation
+## Configuration
 
-Le script accepte deux options principales :
+Le script modifie automatiquement le fichier `/etc/systemd/resolved.conf` pour inclure les informations DNS spécifiées. Si l’adresse DNS change, le script remplace l’ancienne adresse par la nouvelle sans demander de saisie de domaine ou de serveur DNS.
 
-    -d : Domaine pour lequel configurer la zone DNS (ex. exemple.com)
-    -n : Nameserver, qui doit être composé uniquement de lettres de l'alphabet anglais (ex. ns1)
+## License
 
-Exemple d'exécution
+Ce projet est sous licence MIT. Consultez le fichier LICENSE pour plus de détails.
 
-sudo ./configure_dns.sh -d exemple.com -n ns1
+## Contribution
 
-Sortie
+Les contributions sont les bienvenues ! N'hésitez pas à soumettre une issue ou une pull request pour toute amélioration ou fonctionnalité supplémentaire.
 
-Le script affiche des informations organisées dans un tableau, incluant l'adresse IP, le nom de domaine, et le nameserver. Après configuration, il effectue des tests de résolution DNS pour vérifier le bon fonctionnement.
-Fonctionnalités du Script
-
-    validate_domain : Valide le format du nom de domaine
-    validate_nameserver : Vérifie que le nameserver ne contient que des lettres
-    Configuration automatique : Modifie et ajuste les fichiers de configuration du DNS
-    Tests de validation : Utilise nslookup pour valider les enregistrements A et PTR
-
-Configuration et Mise à jour
-
-Le script configure automatiquement /etc/bind/named.conf.default-zones pour inclure les zones configurées. Il gère également la mise à jour de /etc/systemd/resolved.conf pour ajouter l’adresse IP et le domaine.
-Dépannage
-
-Si le script échoue, vérifiez les points suivants :
-
-    Permissions sudo : Assurez-vous d'avoir les droits suffisants
-    BIND9 installé : Le script doit pouvoir installer BIND9 si nécessaire
-    Nom de domaine valide : Vérifiez le format de votre nom de domaine et nameserver
-
-Contributions
-
-Les contributions sont les bienvenues ! N'hésitez pas à forker le projet, créer une branche, puis soumettre une pull request.
-Licence
-
-Ce projet est sous licence MIT. Voir le fichier LICENSE pour plus de détails.
+Note : Ce script est fourni "tel quel" sans garantie de fonctionnement pour des configurations spécifiques. Utilisez-le avec précaution et en sachant qu'il modifiera vos configurations DNS.
