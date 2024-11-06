@@ -37,7 +37,7 @@ done
 
 # Informations du script
 scriptName="Configuration de DNS (BIND9)"
-author="Auteur : [Ton Nom]"
+author="Auteur : WHITEXUDAN"
 version="Version : 1.0"
 date="Date : $(date +'%d/%m/%Y')"
 
@@ -46,16 +46,6 @@ bold=$(tput bold)
 blue="\e[34m"
 reset="\e[0m"
 
-# Informations du script
-scriptName="Configuration de DNS (BIND9)"
-author="Auteur : [whitexudan]"
-version="Version : 1.0"
-date="Date : $(date +'%d/%m/%Y')"
-
-# Couleurs pour les informations
-bold=$(tput bold)
-blue="\e[34m"
-reset="\e[0m"
 
 # Calcul des longueurs pour ajuster la largeur de la table dynamiquement
 maxLength=$(printf "%s\n" "$scriptName" "$author" "$version" "$date" | awk '{ if (length > L) L = length } END { print L }')
